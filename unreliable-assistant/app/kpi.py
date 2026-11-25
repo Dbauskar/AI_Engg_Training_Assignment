@@ -122,6 +122,12 @@ def collect(root: Path = ROOT) -> dict[str, tuple[float, str, str]]:
 
     for k, v in _load(ev / "results" / "kpi_extra.json").get("kpis", {}).items():
         got[k] = (float(v["value"]), v["scale"], "evals/results/kpi_extra.json")
+    # KPI-18 with the real LLM answerer (the local bench only has the extractive stand-in); only used when a live-LLM run exists
+    ga = m.get("goal_alignment")
+    if ga is not None and str((ragas.get("system") or {}).get("answerer", "")).startswith("llm:"):
+        got["KPI-18"] = (round(float(ga), 4), f"{m.get('n_generated')} golden-set answers from {ragas['system']['answerer']}; mean cosine(question, answer), bge-small; "
+                         "a different workload from the synthetic bench (extractive stand-in measured "
+                         + f"{got.get('KPI-18', (float('nan'),))[0]:.3f})", "evals/results.json")
 
     load = _load(ev / "results" / "load_k6.json").get("kpis", {})
     for k, v in load.items():

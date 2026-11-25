@@ -195,3 +195,19 @@ def test_near_verbatim_restatement_passes_but_changed_meaning_does_not():
     src = ["Access rights are reviewed quarterly by the owning manager."]
     assert near_verbatim("Access rights are reviewed quarterly by the owning manager.", src)
     assert not near_verbatim("Access rights are not reviewed quarterly by the owning manager.", src)  # negation flips meaning
+
+
+def test_statements_about_what_the_passages_do_not_say_are_not_claims_but_factual_negatives_are():
+    from agents.verification import split_claims
+    assert split_claims("The passages do not state which password manager is approved.") == []
+    assert split_claims("The policy does not mention flights, so that part is unanswered.") == []
+    assert split_claims("Alcohol is not reimbursable under the expense policy.") == ["Alcohol is not reimbursable under the expense policy."]
+    assert split_claims("The policy does not allow refunds above 5,000 USD without approval.") != []  # a factual negative is still checked
+
+
+def test_attribution_wrappers_are_stripped_but_the_asserted_content_is_still_checked():
+    from agents.verification import split_claims
+    assert split_claims("The policy states that alcohol is not reimbursable.") == ["Alcohol is not reimbursable."]
+    assert split_claims("They also say no transfer may be executed without a recorded human approval.") == ["No transfer may be executed without a recorded human approval."]
+    assert split_claims("Additionally, refunds above 5,000 USD need director approval.") == ["Refunds above 5,000 USD need director approval."]
+    assert split_claims("Refunds above 5,000 USD need director approval.") == ["Refunds above 5,000 USD need director approval."]  # untouched

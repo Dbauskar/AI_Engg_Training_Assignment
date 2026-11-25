@@ -223,6 +223,8 @@ def score_items(stack: dict[str, Any], items: list[GoldenItem], ret: dict[str, d
                                              "unsupported_claims": [c for c, g in zip(claims, ok) if not g], "chunks": list(res.retrieved_chunk_ids)})
                 rec.update(claims=len(claims), unsupported=sum(not x for x in ok), faithfulness=(sum(ok) / len(ok)) if ok else 1.0,
                            answer_relevancy=float(stack["retriever"].reranker.score(it.question, [clean_answer(res.answer)])[0]))
+                v = stack["embedder"].encode([it.question, clean_answer(res.answer)], False)  # same definition as KPI-18 in scripts/measure_kpis_agent.py
+                rec["goal_alignment"] = float(np.asarray(v[0]) @ np.asarray(v[1]))
                 if DUMP_UNSUPPORTED and rec["answer_relevancy"] < 0.8:  # diagnostics only (synthetic golden data)
                     DUMP_UNSUPPORTED.append({"id": it.id, "low_relevancy": round(rec["answer_relevancy"], 3), "question": it.question, "answer": res.answer})
         else:
@@ -239,7 +241,7 @@ def aggregate(recs: list[dict[str, Any]]) -> dict[str, Any]:
     m = lambda key, rows: mean([r[key] for r in rows if key in r])  # noqa: E731
     return {
         "n": len(recs), "n_answerable": len(ans), "n_negative": len(neg), "n_generated": len(gen),
-        "faithfulness": m("faithfulness", gen), "answer_relevancy": m("answer_relevancy", gen),
+        "faithfulness": m("faithfulness", gen), "answer_relevancy": m("answer_relevancy", gen), "goal_alignment": m("goal_alignment", gen),
         "hallucination_rate_claims": (sum(r["unsupported"] for r in gen) / claims) if claims else 0.0,
         "hallucination_rate_responses": mean([float(r["unsupported"] > 0) for r in gen]) if gen else 0.0,
         "context_precision": m("context_precision", ans), "context_recall": m("context_recall", ans),
@@ -269,6 +271,9 @@ def check_gates(metrics: dict[str, Any], which: str) -> list[dict[str, Any]]:
 
 async def amain(a: argparse.Namespace) -> int:
     items = load_golden()
+    if getattr(a, "ids", ""):  # diagnostics: replay only these question ids
+        keep_ids = set(a.ids.split(","))
+        items = [it for it in items if it.id in keep_ids or it.split == "dev"]  # dev kept so calibration still works
     if a.limit_per_stratum:
         seen: Counter = Counter()
         keep = []
@@ -290,6 +295,8 @@ async def amain(a: argparse.Namespace) -> int:
     rows = [{"expect": it.expect, **ret[it.id]} for it in items if it.split == "dev"]
     cal = calibrate(rows, a.calibrate)
     tau = a.threshold if a.threshold is not None else cal["chosen"]["tau"]
+    if getattr(a, "ids", ""):  # replay mode: calibrated on dev above, but only generate for the requested ids
+        items = [it for it in items if it.id in set(a.ids.split(","))]
     print(f"B. abstention threshold: {'--threshold ' + str(tau) if a.threshold is not None else f'calibrated on dev ({a.calibrate}) = {tau}'} (design default {DESIGN_THRESHOLD}; "
           f"on dev the design value answers {cal['design_threshold_row']['answerable_answered']:.0%} of answerable and abstains on {cal['design_threshold_row']['negative_abstained']:.0%} of negatives)", flush=True)
 
@@ -359,6 +366,7 @@ if __name__ == "__main__":
     ap.add_argument("--calibrate", choices=["safety", "balanced"], default="safety")
     ap.add_argument("--llm", action="store_true", help="answer with the OpenRouter LLM (needs OPENROUTER_API_KEY; costs real money, ~$0.03)")
     ap.add_argument("--dump-unsupported", default="", help="write answers with judge-unsupported claims to this JSON file (diagnostics)")
+    ap.add_argument("--ids", default="", help="comma-separated question ids to replay (dev items are kept for calibration)")
     ap.add_argument("--gates", choices=["all", "ragas"], default="all")
     ap.add_argument("--limit-per-stratum", type=int, default=0)
     ap.add_argument("--out", default=str(ROOT / "evals/results.json"))

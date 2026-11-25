@@ -1,0 +1,59 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: {POSTGRES_PASSWORD: ci-postgres-pw, POSTGRES_USER: assistant, POSTGRES_DB: assistant}
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U assistant" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7.2
+        ports: ["6379:6379"]
+    env:
+      POSTGRES_PASSWORD: ci-postgres-pw
+      APP_DB_PASSWORD: ci-app-db-pw
+      API_TOKEN_SECRET: ci-token-secret-ci-token-secret-0123456789
+      GRAFANA_ADMIN_PASSWORD: ci-unused
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: models, indexes, schema
+        run: |
+          uv run python scripts/fetch_models.py
+          uv run python scripts/ingest.py --tenant acme-corp
+          uv run python scripts/graphify_build.py --tenant acme-corp
+          uv run python scripts/migrate.py
+      - name: unit tests
+        run: uv run pytest -q
+      - name: RAGAS gates
+        run: uv run python -m evals.run_ragas
+      - name: red team
+        run: uv run python -m evals.redteam
+      - name: chaos
+        run: uv run python -m evals.chaos
+      - name: KPI measurements (uncontended)
+        run: uv run python scripts/measure_kpis.py
+      - name: local load test (500 VUs)
+        run: |
+          curl -sSL https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz | tar xz --strip-components 1
+          uv run python -m load_tests.make_tokens --n 500
+          nohup uv run uvicorn app.main:app --port 8080 > server.log 2>&1 &
+          until curl -sf localhost:8080/readyz; do sleep 3; done
+          VUS=500 HOLD=60 RAMP=30 ./k6 run --quiet load_tests/k6_load.js || true   # thresholds are judged by the KPI gate, not here
+          uv run python scripts/k6_to_kpi.py load_tests/out/k6_summary.json --label "ci runner, real postgres+redis"
+      - name: KPI gate (36 rows; fails on any FAIL or NOT MEASURED)
+        run: uv run python scripts/kpi_gate.py --json kpi_gate.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kpi-evidence
+          path: |
+            evals/results.json
+            evals/results/
+            kpi_gate.json
+            server.log

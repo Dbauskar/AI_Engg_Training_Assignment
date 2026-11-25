@@ -36,12 +36,30 @@ _WORD_NUM = {w: str(i) for i, w in enumerate(
     "zero one two three four five six seven eight nine ten eleven twelve".split())}
 
 
+_META = re.compile(r"^(?:the\s+)?(?:passages?|documents?|policy|policies|sources?|context)\s+(?:do(?:es)?\s+not|don't|doesn't|never)\s+"
+                   r"(?:state|say|mention|address|name|identify|specify|give|cover|describe|include|contain|provide)\b", re.I)
+
+
+_ATTRIB = re.compile(r"^(?:(?:the\s+)?(?:passages?|documents?|policy|policies|[\w ]{0,30}?policy)\s+(?:also\s+)?(?:states?|says?|specif(?:y|ies)|requires?\s+that|notes?)\s+that\s+|"
+                     r"(?:they|it)\s+(?:also\s+)?(?:states?|says?|specif(?:y|ies)|notes?)\s+(?:that\s+)?|"
+                     r"(?:additionally|also|furthermore|moreover),?\s+)", re.I)
+
+
+def _strip_attribution(claim: str) -> str:
+    """'The policy states that X' asserts X; the attribution wrapper itself is not a claim about the world."""
+    m = _ATTRIB.match(claim)
+    rest = claim[m.end():].strip() if m else claim
+    return (rest[:1].upper() + rest[1:]) if rest and rest != claim else claim
+
+
 def split_claims(answer: str) -> list[str]:
     text = CITATION.sub("", answer)
     parts = re.split(r"(?<=[.!?])\s+|\n+", text)
     out = [p.strip(" -*•\t") for p in parts if len(re.findall(r"\w+", p)) >= 3]
+    # "The passages do not state X" is a statement about the documents, not a fact about the world; it can only under-claim
+    out = [c for c in out if not _META.match(c)]
     # a list lead-in ("Key rules in the Password Policy:") asserts nothing; a digit means it might carry a figure, so keep those
-    return [c for c in out if not (c.endswith(":") and not NUMBER.search(c))]
+    return [_strip_attribution(c) for c in out if not (c.endswith(":") and not NUMBER.search(c))]
 
 
 def _numbers(text: str) -> set[str]:

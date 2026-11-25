@@ -23,9 +23,10 @@ def corpus():
     atk = list(T.ATTACK) + list(EX_A) + list(R.DIRECT) + [x if isinstance(x, str) else x["text"] for x in R.INDIRECT]
     atk += [turns[-1] for turns in R.CRESCENDO]
     ben = list(T.BENIGN) + list(EX_B) + list(R.BENIGN)
-    gen = ROOT / "evals/injection_gen/train.json"  # LLM-generated (scripts/gen_injection_data.py); holdout3.json is never read here
-    if gen.exists():
-        g = json.loads(gen.read_text()); atk += g["direct"] + g["indirect"]; ben += g["benign"]
+    for name in ("train.json", "train2.json"):  # LLM-generated (scripts/gen_injection_data.py); holdout3.json is never read here
+        gen = ROOT / "evals/injection_gen" / name
+        if gen.exists():
+            g = json.loads(gen.read_text()); atk += g["direct"] + g["indirect"]; ben += g["benign"]
     for text, kind in S.DEV + S.TEST:
         (ben if kind == "benign" else atk).append(text)
     return [t for t in dict.fromkeys(atk)], [t for t in dict.fromkeys(ben)]
@@ -58,8 +59,14 @@ def train_lexical(atk, ben, fp_target):
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(); ap.add_argument("--fp-target", type=float, default=0.005); a = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--fp-target", type=float, default=0.005)
+    ap.add_argument("--lexical-only", action="store_true", help="retrain only app/injection_lex.npz and leave the embedding probe untouched")
+    a = ap.parse_args()
     atk, ben = corpus()
+    if a.lexical_only:
+        print(f"training texts: {len(atk)} attack, {len(ben)} benign")
+        train_lexical(atk, ben, a.fp_target)
+        raise SystemExit(0)
     emb = OnnxEmbedder(DEFAULT_EMBED_DIR, threads=2)
     X = np.vstack([emb.encode(atk, False), emb.encode(ben, False)])
     y = np.array([1] * len(atk) + [0] * len(ben))
