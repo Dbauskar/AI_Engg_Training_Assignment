@@ -149,6 +149,29 @@ def verbatim_quote_supported(claim: str, ctx: str) -> bool:
     return len(wrapper.split()) <= 6 and _norm(m.group(1)) in _norm(ctx)
 
 
+LLM_JUDGE_MODEL = ""   # set by --llm-judge: a stronger, different-family model that rechecks only claims the small NLI judge rejected
+LLM_RECHECKS: list[bool] = []
+
+
+def llm_recheck(claim: str, chunk_texts: list[str], question: str) -> bool:
+    if not LLM_JUDGE_MODEL:
+        return False
+    from concurrent.futures import ThreadPoolExecutor
+    from agents.llm_reasoner import OpenRouterClient
+    from agents.llm_verifier import LLMClaimJudge
+
+    async def go() -> bool:
+        c = OpenRouterClient(model=LLM_JUDGE_MODEL, timeout_s=90, disable_reasoning="sonnet" not in LLM_JUDGE_MODEL)
+        try:
+            return await LLMClaimJudge(c, timeout_s=90, max_tokens=800 if "sonnet" in LLM_JUDGE_MODEL else 8).supported(claim, "\n".join(chunk_texts), question)
+        finally:
+            await c.close()
+    with ThreadPoolExecutor(1) as ex:  # score_items runs inside the event loop, so use a private loop in a worker thread
+        ok = ex.submit(asyncio.run, go()).result()
+    LLM_RECHECKS.append(ok)
+    return ok
+
+
 def judge(nli: OnnxNli, claims: list[str], chunk_texts: list[str], question: str = "") -> list[bool]:
     """Independent claim check: a claim is supported iff some sentence/window of some retrieved chunk entails it (P >= 0.5)
     and every number in the claim occurs in the retrieved text."""
@@ -167,7 +190,7 @@ def judge(nli: OnnxNli, claims: list[str], chunk_texts: list[str], question: str
                 premises.append(cand)
                 hyps.append(claim)
         ent = nli.probs(premises, hyps)[0] if premises else np.zeros(1)
-        out.append(bool(float(ent.max()) >= 0.5))
+        out.append(bool(float(ent.max()) >= 0.5) or llm_recheck(claim, chunk_texts, question))
     return out
 
 
@@ -176,7 +199,7 @@ async def run_system(stack: dict[str, Any], items: list[GoldenItem], tau: float,
     from agents.react import ReActConfig
     harness = ToolExecutionHarness()
     register_rag_tools(harness, stack["retriever"], stack["pools"])
-    verifier = VerificationSubagent(stack["nli_runtime"], None, stack["pools"])
+    verifier = VerificationSubagent(stack["nli_runtime"], None, stack["pools"], llm_judge=stack.get("llm_verifier"))
     orch = Orchestrator(harness, stack["triage"], verifier,
                         (lambda q, data: (ResilientReasoner(LLMReasoner(llm, data["chunks"], q), ExtractiveReasoner(data["chunks"], q), llm.usage)
                                           if llm is not None else ExtractiveReasoner(data["chunks"], q)) if data else _Hello()),
@@ -285,6 +308,14 @@ async def amain(a: argparse.Namespace) -> int:
     print(f"golden set: {len(items)} questions {dict(Counter(i.stratum for i in items))}", flush=True)
     tmp = Path(tempfile.mkdtemp())
     stack = build_stack(tmp)
+    global LLM_JUDGE_MODEL
+    LLM_JUDGE_MODEL = a.llm_judge or ""
+    if a.llm_verifier:  # runtime second-stage verifier: a different model family than the answerer
+        from agents.llm_reasoner import OpenRouterClient as _C
+        from agents.llm_verifier import LLMClaimJudge
+        from app.config import load_env as _le
+        _le()
+        stack["llm_verifier"] = LLMClaimJudge(_C(model=a.llm_verifier, timeout_s=8.0))
     retriever = stack["retriever"]
     retrieval_record(retriever, "warm up")
     chunk_text = {c.chunk_id: c.text for c in retriever.index_for(TENANT).chunks}
@@ -314,6 +345,9 @@ async def amain(a: argparse.Namespace) -> int:
         llm_report = {"model": llm.model, "calls": u.calls, "prompt_tokens": u.prompt_tokens, "completion_tokens": u.completion_tokens,
                       "cost_usd": round(u.cost_usd, 5), "retries": u.retries, "fallbacks": u.fallbacks, "errors": u.errors,
                       "cost_per_1000_generations_usd": round(u.cost_usd / max(u.calls, 1) * 1000, 4),
+                      "verifier_cost_usd": round(stack["llm_verifier"].client.usage.cost_usd, 5) if stack.get("llm_verifier") else 0.0,
+                      "verifier_calls": stack["llm_verifier"].client.usage.calls if stack.get("llm_verifier") else 0,
+                      "cost_per_1000_total_usd": round((u.cost_usd + (stack["llm_verifier"].client.usage.cost_usd if stack.get("llm_verifier") else 0.0)) / max(u.calls, 1) * 1000, 4),
                       "latency_ms_p50_p95": [round(float(np.percentile(u.latencies_ms, 50)), 0), round(float(np.percentile(u.latencies_ms, 95)), 0)] if u.latencies_ms else None}
         await llm.close()
     print(f"C. end-to-end run done ({time.perf_counter() - t:.0f}s)", flush=True)
@@ -331,7 +365,8 @@ async def amain(a: argparse.Namespace) -> int:
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "golden": {"path": str(GOLDEN_PATH.relative_to(ROOT)), "sha256": hashlib.sha256(GOLDEN_PATH.read_bytes()).hexdigest(), "items": len(items),
                    "strata": dict(Counter(i.stratum for i in items)), "split": dict(Counter(i.split for i in items))},
-        "system": {"retrieval_threshold": tau, "design_threshold": DESIGN_THRESHOLD, "answerer": (f"llm:{llm.model}" if llm is not None else "extractive"), "llm": llm_report, "nli_runtime": "nli-deberta-v3-xsmall (+guards)",
+        "system": {"retrieval_threshold": tau, "design_threshold": DESIGN_THRESHOLD, "answerer": (f"llm:{llm.model}" if llm is not None else "extractive"), "llm": llm_report,
+                   "llm_verifier": a.llm_verifier or None, "llm_judge": ({"model": a.llm_judge, "rechecks": len(LLM_RECHECKS), "approved": sum(LLM_RECHECKS)} if a.llm_judge else None), "nli_runtime": "nli-deberta-v3-xsmall (+guards)",
                    "nli_eval": "nli-MiniLM2-L6-H768 (independent)", "reranker": "ms-marco-MiniLM-L-6-v2", "embedder": "bge-small-en-v1.5"},
         "calibration": cal, "metrics": splits, "by_stratum_test": by_stratum, "gates": {"judged_on": "test", "which": a.gates, "results": gates,
         "all_pass": all(g["status"] == "PASS" for g in gates)}, "failures": failures, "caveats": CAVEATS,
@@ -367,6 +402,8 @@ if __name__ == "__main__":
     ap.add_argument("--llm", action="store_true", help="answer with the OpenRouter LLM (needs OPENROUTER_API_KEY; costs real money, ~$0.03)")
     ap.add_argument("--dump-unsupported", default="", help="write answers with judge-unsupported claims to this JSON file (diagnostics)")
     ap.add_argument("--ids", default="", help="comma-separated question ids to replay (dev items are kept for calibration)")
+    ap.add_argument("--llm-verifier", default="", help="runtime second-stage claim verifier model, e.g. openai/gpt-6-luna")
+    ap.add_argument("--llm-judge", default="", help="independent evaluation judge that rechecks NLI-rejected claims, e.g. anthropic/claude-sonnet-5.5")
     ap.add_argument("--gates", choices=["all", "ragas"], default="all")
     ap.add_argument("--limit-per-stratum", type=int, default=0)
     ap.add_argument("--out", default=str(ROOT / "evals/results.json"))

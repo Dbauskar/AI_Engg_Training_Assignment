@@ -53,7 +53,7 @@ class InjectionShield:
 
     @hookimpl
     def pre_execute(self, ctx: RequestContext) -> None:
-        v = self.det.scan(ctx.query)
+        v = self.det.scan(ctx.query, escalate=True)  # ctx.query is already PII-redacted (pii_redactor runs first)
         if v.is_attack:
             ctx.event("injection_shield", "injection.blocked", family=v.family, layer=v.layer, source="query")
             raise Block("E_INJECTION_BLOCKED", self.BLOCK_MESSAGE, "prompt_injection")

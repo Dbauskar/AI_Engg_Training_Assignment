@@ -94,9 +94,9 @@ def collect(root: Path = ROOT) -> dict[str, tuple[float, str, str]]:
 
     llm = (ragas.get("system") or {}).get("llm")
     if llm and llm.get("calls"):  # only the paid LLM generation is priced; embeddings/rerank/NLI run on owned compute (not costed)
-        got["KPI-29"] = (round(float(llm["cost_per_1000_generations_usd"]), 4),
+        got["KPI-29"] = (round(float(llm.get("cost_per_1000_total_usd", llm["cost_per_1000_generations_usd"])), 4),
                          f"{llm['calls']} real {llm['model']} generations via OpenRouter, {llm['prompt_tokens']}+{llm['completion_tokens']} tokens; "
-                         "LLM spend only, excludes infrastructure/GPU cost and assumes 1 generation per uncached query",
+                         "answerer + second-stage verifier LLM spend only (evaluation judge excluded); excludes infrastructure/GPU cost and assumes 1 generation per uncached query",
                          "evals/results.json")
     rt = _load(ev / "results" / "redteam.json").get("inproc", {})
     cats = rt.get("categories", {})

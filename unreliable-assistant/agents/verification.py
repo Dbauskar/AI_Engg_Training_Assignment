@@ -126,8 +126,9 @@ def check_claim_guards(claim: str, premise: str, question: str = "") -> str | No
 
 class VerificationSubagent:
     def __init__(self, nli: NliLike, audit_sink: Any | None = None, pools: Any | None = None,
-                 threshold: float = ENTAILMENT_THRESHOLD) -> None:
+                 threshold: float = ENTAILMENT_THRESHOLD, llm_judge: Any | None = None) -> None:
         self.nli, self.sink, self.pools, self.threshold = nli, audit_sink, pools, threshold
+        self.llm_judge = llm_judge  # optional second stage for claims only the NLI model rejected (agents/llm_verifier.py)
 
     def _judge(self, claims: list[str], premise: str, question: str = "") -> list[ClaimVerdict]:  # blocking: run off the event loop
         verdicts: list[ClaimVerdict] = []
@@ -152,6 +153,22 @@ class VerificationSubagent:
                     ok = best.get(i, 0.0) >= self.threshold
                     verdicts[i] = ClaimVerdict(v.claim, ok, "ok" if ok else "nli")
         return verdicts
+
+    async def _escalate(self, verdicts: list[ClaimVerdict], premise: str, question: str) -> list[ClaimVerdict]:
+        """Ask the LLM judge about claims the NLI model rejected. Number and quantifier guard failures are never escalated,
+        and a judge error leaves the claim vetoed (fail closed)."""
+        j = self.llm_judge
+        if j is None:
+            return verdicts
+        todo = [i for i, v in enumerate(verdicts) if not v.supported and v.reason == "nli"][: j.max_claims]
+        if not todo:
+            return verdicts
+        results = await asyncio.gather(*[j.supported(verdicts[i].claim, premise, question) for i in todo], return_exceptions=True)
+        out = list(verdicts)
+        for i, ok in zip(todo, results):
+            if ok is True:  # an exception object (judge failure) is never truthy-approved: fail closed
+                out[i] = ClaimVerdict(out[i].claim, True, "llm")
+        return out
 
     async def verify(self, final: Final, evidence: Evidence, route: str) -> VerifyResult:
         if route != "HYBRID_RAG":
@@ -185,6 +202,7 @@ class VerificationSubagent:
             return VerifyResult(True), []
         runner = self.pools.llm.run_sync if self.pools else asyncio.to_thread
         verdicts: list[ClaimVerdict] = await runner(self._judge, claims, premise, evidence.query)
+        verdicts = await self._escalate(verdicts, premise, evidence.query)
         bad = [v for v in verdicts if not v.supported]
         if bad:
             first = bad[0]

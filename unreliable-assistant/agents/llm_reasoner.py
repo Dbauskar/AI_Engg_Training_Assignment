@@ -60,7 +60,8 @@ class LLMUsage:
 
 class OpenRouterClient:
     def __init__(self, api_key: str | None = None, model: str | None = None, timeout_s: float = 20.0,
-                 transport: httpx.AsyncBaseTransport | None = None) -> None:
+                 transport: httpx.AsyncBaseTransport | None = None, disable_reasoning: bool = True) -> None:
+        self._no_reasoning = disable_reasoning  # some models (e.g. claude-sonnet-5.5) make reasoning mandatory
         self._key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
         if not self._key:
             raise RuntimeError("OPENROUTER_API_KEY is not set")
@@ -81,10 +82,10 @@ class OpenRouterClient:
             span.set_attribute("llm.prompt_chars", sum(len(m["content"]) for m in messages))
             t0 = time.perf_counter()
             try:
-                r = await self._http.post("/chat/completions", headers={"Authorization": f"Bearer {self._key}"}, json={
-                    "model": self.model, "messages": messages, "max_tokens": max_tokens, "temperature": 0,
-                    "reasoning": {"enabled": False},  # hidden reasoning tokens count against max_tokens and truncated answers mid-sentence
-                    "usage": {"include": True}})
+                body = {"model": self.model, "messages": messages, "max_tokens": max_tokens, "temperature": 0, "usage": {"include": True}}
+                if self._no_reasoning:  # hidden reasoning tokens count against max_tokens and truncated answers mid-sentence
+                    body["reasoning"] = {"enabled": False}
+                r = await self._http.post("/chat/completions", headers={"Authorization": f"Bearer {self._key}"}, json=body)
             except (httpx.TimeoutException, httpx.TransportError) as e:
                 self._err("timeout" if isinstance(e, httpx.TimeoutException) else "network")
                 raise LLMError("timeout" if isinstance(e, httpx.TimeoutException) else "network", True) from None

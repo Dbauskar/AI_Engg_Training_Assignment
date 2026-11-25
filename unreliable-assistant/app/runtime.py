@@ -84,6 +84,7 @@ class Runtime:
     ready: bool = False
     warm_seconds: float | None = None
     llm: Any = None   # OpenRouterClient or None (extractive answerer only)
+    judge_client: Any = None   # OpenRouterClient behind the second-stage claim verifier, or None
 
     async def warmup(self) -> None:
         """Pay the first-request penalty (ONNX shape planning, spaCy load, connection setup) before taking traffic."""
@@ -115,6 +116,8 @@ class Runtime:
             await self.redis.aclose()
         if self.llm is not None:
             await self.llm.close()
+        if self.judge_client is not None:
+            await self.judge_client.close()
         self.pools.shutdown()
 
 
@@ -140,11 +143,18 @@ async def build_runtime(s: Settings) -> Runtime:
         inj._clf = EmbeddingClassifier(embedder)
         if LEX_PATH.exists():  # TF-IDF paraphrase detector: no encoder call, ~0.3 ms
             inj._lex = LexicalClassifier()
+    if _flag("INJECTION_LLM", "1") and os.environ.get("OPENROUTER_API_KEY") and _flag("LLM_ENABLED", "1"):  # borderline-band second opinion
+        from agents.llm_verifier import LLMInjectionJudge
+        inj._esc = LLMInjectionJudge(os.environ["OPENROUTER_API_KEY"], os.environ.get("INJECTION_MODEL", "openai/gpt-6-luna"))
     registry = PluginRegistry.from_config(s.plugin_config, default_factories(shared_detector(), inj, embedder=embedder),
                                           audit_sink=audit, runner=pools.triage.run_sync)
-    verifier = VerificationSubagent(nli, audit, pools)
-
     llm = OpenRouterClient() if (_flag("LLM_ENABLED", "1") and os.environ.get("OPENROUTER_API_KEY")) else None
+    judge = judge_client = None
+    if llm is not None and _flag("LLM_VERIFIER", "1"):  # second-stage claim check by a DIFFERENT model family than the answerer
+        from agents.llm_verifier import LLMClaimJudge
+        judge_client = OpenRouterClient(model=os.environ.get("VERIFIER_MODEL", "openai/gpt-6-luna"), timeout_s=8.0)
+        judge = LLMClaimJudge(judge_client)
+    verifier = VerificationSubagent(nli, audit, pools, llm_judge=judge)
 
     def reasoner_for(query: str, data: dict | None):
         if data is not None:
@@ -170,6 +180,7 @@ async def build_runtime(s: Settings) -> Runtime:
 
     rt = Runtime(s, pools, pipeline, registry, cache, harness, store, redis, probes={"postgres": ping_pg, "redis": redis.ping})
     rt.llm = llm
+    rt.judge_client = judge_client
 
     async def warm() -> None:
         await asyncio.to_thread(triage.classify, "warm up question about policy")

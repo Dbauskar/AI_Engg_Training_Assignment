@@ -211,3 +211,45 @@ def test_attribution_wrappers_are_stripped_but_the_asserted_content_is_still_che
     assert split_claims("They also say no transfer may be executed without a recorded human approval.") == ["No transfer may be executed without a recorded human approval."]
     assert split_claims("Additionally, refunds above 5,000 USD need director approval.") == ["Refunds above 5,000 USD need director approval."]
     assert split_claims("Refunds above 5,000 USD need director approval.") == ["Refunds above 5,000 USD need director approval."]  # untouched
+
+
+class _Judge:
+    max_claims = 4
+
+    def __init__(self, answer: bool = True, boom: bool = False):
+        self.answer, self.boom, self.asked = answer, boom, []
+
+    async def supported(self, claim, premise, question=""):
+        self.asked.append(claim)
+        if self.boom:
+            raise RuntimeError("down")
+        return self.answer
+
+
+class _RejectNli:
+    def probs(self, premises, hyps):
+        z = np.zeros(len(premises), dtype=np.float32)
+        return z, z
+
+
+async def test_llm_stage_rescues_only_nli_rejections_and_never_number_or_quantifier_failures():
+    from agents.verification import VerificationSubagent
+    j = _Judge(True)
+    v = VerificationSubagent(_RejectNli(), None, llm_judge=j)
+    ok = await v.verify(Final("Two authorised approvers are needed for a 12,000 USD wire.", citations=(WIRE,)), ev(query="12,000 USD wire?"), "HYBRID_RAG")
+    assert ok.ok and j.asked  # NLI said no, the LLM judge said yes
+    j2 = _Judge(True)
+    v2 = VerificationSubagent(_RejectNli(), None, llm_judge=j2)
+    bad = await v2.verify(Final("A 99,999 USD wire needs three approvers.", citations=(WIRE,)), ev(query=""), "HYBRID_RAG")
+    assert not bad.ok and not j2.asked  # the number guard fails first: the judge is never consulted
+
+
+async def test_llm_stage_fails_closed_on_error_and_on_rejection():
+    from agents.verification import VerificationSubagent
+    for judge in (_Judge(False), _Judge(boom=True)):
+        v = VerificationSubagent(_RejectNli(), None, llm_judge=judge)
+        try:
+            r = await v.verify(Final("Two authorised approvers are needed.", citations=(WIRE,)), ev(), "HYBRID_RAG")
+        except RuntimeError:
+            raise AssertionError("judge errors must not escape the verifier")
+        assert not r.ok

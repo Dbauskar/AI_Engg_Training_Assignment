@@ -199,9 +199,13 @@ class LexicalClassifier:
 class InjectionDetector:
     def __init__(self, embedder: Embedder | None = None, attack_examples: list[str] | None = None,
                  benign_examples: list[str] | None = None, threshold: float = 0.80, margin: float = 0.03,
-                 classifier: "EmbeddingClassifier | None" = None, lexical: "LexicalClassifier | None" = None) -> None:
+                 classifier: "EmbeddingClassifier | None" = None, lexical: "LexicalClassifier | None" = None,
+                 escalator: Any = None, esc_lex: float = 0.5, esc_emb: float = 0.3) -> None:
         self.threshold, self.margin, self._emb, self._clf = threshold, margin, embedder, classifier
         self._lex = lexical
+        # borderline band (chosen on half of a fresh held-out set, not on the evaluation data): not blocked by the fast layers but
+        # lexical score >= esc_lex or embedding score >= esc_emb -> ask the LLM judge (user queries only, never retrieved chunks)
+        self._esc, self.esc_lex, self.esc_emb = escalator, esc_lex, esc_emb
         self._atk = self._ben = None
         if embedder is not None and attack_examples and benign_examples:
             self._atk = self._unit(embedder.encode(attack_examples, False))
@@ -212,7 +216,7 @@ class InjectionDetector:
         m = np.asarray(m, dtype=np.float32)
         return m / np.maximum(np.linalg.norm(m, axis=-1, keepdims=True), 1e-9)
 
-    def scan(self, text: str) -> Verdict:
+    def scan(self, text: str, escalate: bool = False) -> Verdict:
         fam = _pattern_scan(text)
         if fam:
             return Verdict(True, fam, "pattern", 1.0)
@@ -225,14 +229,18 @@ class InjectionDetector:
             a, b = float((self._atk @ v).max()), float((self._ben @ v).max())
             if a >= self.threshold and a > b + self.margin:
                 return Verdict(True, "semantic", "embedding", a)
+        p_lex = p_emb = 0.0
         if self._lex is not None and text.strip():
-            p = self._lex.score(text)
-            if p >= self._lex.threshold:
-                return Verdict(True, "classifier", "lexical", p)
+            p_lex = self._lex.score(text)
+            if p_lex >= self._lex.threshold:
+                return Verdict(True, "classifier", "lexical", p_lex)
         if self._clf is not None and text.strip():
-            p = self._clf.score(text)
-            if p >= self._clf.threshold:
-                return Verdict(True, "classifier", "embedding", p)
+            p_emb = self._clf.score(text)
+            if p_emb >= self._clf.threshold:
+                return Verdict(True, "classifier", "embedding", p_emb)
+        if escalate and self._esc is not None and (p_lex >= self.esc_lex or p_emb >= self.esc_emb):
+            if self._esc.is_attack(text) is True:
+                return Verdict(True, "llm_escalation", "llm", max(p_lex, p_emb))
         return Verdict(False)
 
     def scan_many(self, texts: list[str]) -> list[Verdict]:
