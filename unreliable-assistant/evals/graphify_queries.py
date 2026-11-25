@@ -1,0 +1,73 @@
+"""100 evaluation queries for the Graphify context builder: (query, gold atomic note ids that contain the answer).
+Token savings are only meaningful if the compressed context still contains the gold notes, so both are measured."""
+
+SINGLE = {
+    "retention-customer-records-retained": ["For how many years are customer records kept after closure?", "What is the retention period once a customer leaves?"],
+    "retention-application-audit-logs": ["How long do we keep application and audit logs?", "When are old logs deleted or anonymised?"],
+    "retention-data-subject-deletion": ["How quickly must a deletion request be completed?", "What is the deadline for a data subject erasure request?"],
+    "retention-legal-holds-override": ["Can a legal hold stop data from being deleted?", "Who can release a legal hold on records?"],
+    "accessctl-multi-factor-authentication": ["Do contractors need multi-factor authentication?", "Is MFA required on all accounts?"],
+    "accessctl-access-rights-reviewed": ["How often are access rights reviewed and who does it?", "When are dormant accounts switched off?"],
+    "accessctl-privileged-access-sessions": ["How long does a privileged session last?", "Are privileged commands logged for audit?"],
+    "incident-severity-1-incident": ["How fast must a severity 1 incident be acknowledged?", "Who gets assigned when a sev 1 incident starts?"],
+    "incident-written-post-incident": ["When is the post-incident review due?", "How long after an incident do we have to write the review?"],
+    "incident-where-personal-data": ["How soon must the regulator be told about a personal data breach?", "What is the notification deadline when personal data is affected?"],
+    "refunds-customers-request-refund": ["What is the refund window after purchase?", "Within how many days can a customer ask for a refund?"],
+    "refunds-enterprise-licence-sku": ["Can an activated enterprise licence be refunded?", "Is SKU-099 refundable after activation?"],
+    "refunds-any-refund-above": ["Which refunds need a support manager's approval?", "Does a 6,000 USD refund need extra approval?"],
+    "refunds-refunds-returned-original": ["Where is a refund paid back to?", "How many business days does a refund take?"],
+    "warranty-standard-hardware-carries": ["How long is the standard hardware warranty?", "What warranty does ordinary hardware carry?"],
+    "warranty-battery-pack-sku": ["What is the warranty on the SKU-205 battery pack?", "How many months is the battery pack covered?"],
+    "warranty-damage-caused-liquid": ["Does liquid damage void the warranty?", "What happens to the warranty after an unauthorised repair?"],
+    "warranty-replacement-units-shipped": ["How quickly are replacement units shipped?", "When does a replacement go out after a claim is approved?"],
+    "expenses-meals-reimbursed-up": ["What is the daily limit for meals on a trip?", "How much can I claim for food per day while travelling?"],
+    "expenses-economy-class-required": ["When must I fly economy?", "Which flights have to be booked in economy class?"],
+    "expenses-expense-reports-submitted": ["By when do expense reports have to be filed?", "Do I need receipts when I submit an expense report?"],
+    "expenses-alcohol-not-reimbursable": ["Can I expense alcohol?", "Are alcoholic drinks reimbursable?"],
+    "wires-every-wire-transfer": ["How many approvers does a 12,000 USD wire need?", "What approval is required for wires above 10,000 USD?"],
+    "wires-transfers-above-250": ["Who else must sign off on very large transfers?", "Does a 300,000 USD transfer need the compliance officer?"],
+    "wires-requester-never-approve": ["Can the person who requested a transfer approve it?", "May software execute a transfer without human approval?"],
+    "changemgmt-every-production-change": ["What is needed before changing production?", "Is a rollback plan required for production changes?"],
+    "changemgmt-change-freeze-applies": ["When is the year-end change freeze?", "Who may approve a fix during the freeze?"],
+    "changemgmt-emergency-changes-reviewed": ["How soon must an emergency change be reviewed?", "When is the retrospective review of an emergency change due?"],
+    "passwords-passwords-least-14": ["How long must a password be?", "What is the minimum number of password characters?"],
+    "passwords-scheduled-rotation-not": ["Do passwords have to be rotated regularly?", "When must a password be changed immediately?"],
+    "passwords-employees-use-approved": ["Which password manager should I use?", "May I reuse my work password elsewhere?"],
+    "remote-employees-expected-work": ["How many days a week am I expected in the office?", "What is the standard office attendance expectation?"],
+    "remote-working-another-country": ["Can I work from another country for six weeks?", "What approval is needed to work abroad for over 30 days?"],
+    "remote-home-office-equipment": ["How much can I claim for home office equipment?", "How often can I claim home office equipment?"],
+    "vendorrisk-tier-1-vendors": ["How often are tier 1 vendors assessed?", "Which report must critical vendors hold?"],
+    "vendorrisk-signed-data-processing": ["What must be signed before sharing personal data with a vendor?", "Do we need a data processing agreement?"],
+    "vendorrisk-vendors-fail-assessment": ["What happens when a vendor fails its assessment?", "How long does a failing vendor get to remediate?"],
+    "pto-full-time-employees": ["How many days of annual leave do full-time staff get?", "What is the yearly holiday entitlement?"],
+    "pto-up-5-unused": ["How many unused leave days can I carry over?", "When do carried-over leave days expire?"],
+    "pto-sick-leave-not": ["Is sick leave limited?", "Who do I tell when I am sick?"],
+}
+
+MULTI = [
+    ("What approvals are needed for large refunds and large wire transfers?", ["refunds-any-refund-above", "wires-every-wire-transfer"]),
+    ("Which rules apply to personal data after a breach and when deleting data on request?", ["incident-where-personal-data", "retention-data-subject-deletion"]),
+    ("How do the change freeze and the emergency review rules fit together?", ["changemgmt-change-freeze-applies", "changemgmt-emergency-changes-reviewed"]),
+    ("What are the password length and multi-factor requirements?", ["passwords-passwords-least-14", "accessctl-multi-factor-authentication"]),
+    ("What must a vendor sign before we share personal data, and how long do we keep customer records?", ["vendorrisk-signed-data-processing", "retention-customer-records-retained"]),
+    ("What does liquid damage do to the warranty and how long is the standard warranty?", ["warranty-damage-caused-liquid", "warranty-standard-hardware-carries"]),
+    ("Who must sign off wires over 250,000 USD and can the requester approve their own?", ["wires-transfers-above-250", "wires-requester-never-approve"]),
+    ("How fast must a severity 1 incident be acknowledged and when is the review due?", ["incident-severity-1-incident", "incident-written-post-incident"]),
+]
+
+FROM_RAG_EVAL = [  # the 12 questions used to evaluate retrieval in Prompt 4
+    ("How long do we keep customer records after an account closes?", ["retention-customer-records-retained"]),
+    ("What is the deadline to notify the regulator after a data breach?", ["incident-where-personal-data"]),
+    ("Is SKU-099 refundable once it has been activated?", ["refunds-enterprise-licence-sku"]),
+    ("How long is the battery warranty for SKU-205?", ["warranty-battery-pack-sku"]),
+    ("Who has to approve a 300,000 USD wire transfer?", ["wires-every-wire-transfer", "wires-transfers-above-250"]),
+    ("When is the holiday change freeze for production deployments?", ["changemgmt-change-freeze-applies"]),
+    ("What is the minimum password length?", ["passwords-passwords-least-14"]),
+    ("How many days per week must I work from the office?", ["remote-employees-expected-work"]),
+    ("Which certification must tier 1 vendors hold?", ["vendorrisk-tier-1-vendors"]),
+    ("How many vacation days do I get each year?", ["pto-full-time-employees"]),
+    ("How often are user access rights reviewed?", ["accessctl-access-rights-reviewed"]),
+    ("What is the daily meal allowance when travelling?", ["expenses-meals-reimbursed-up"]),
+]
+
+QUERIES: list[tuple[str, list[str]]] = ([(q, [nid]) for nid, qs in SINGLE.items() for q in qs] + MULTI + FROM_RAG_EVAL)

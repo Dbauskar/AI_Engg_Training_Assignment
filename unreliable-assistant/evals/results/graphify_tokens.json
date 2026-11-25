@@ -1,0 +1,18 @@
+{
+  "queries": 100,
+  "budget": 320,
+  "dense": true,
+  "anchors": 1,
+  "graph_nodes": 102,
+  "anchor_is_gold": 0.99,
+  "all_gold_covered": 0.99,
+  "mean_tokens": {
+    "naive_top4": 228.53,
+    "actual_kept": 53.72,
+    "today_compressed": 72.67,
+    "graph": 70.16
+  },
+  "reduction_vs_naive": 0.6929943552268849,
+  "reduction_vs_actual": -0.3060312732688011,
+  "note": "KPI-26 target >= 45% is met only against the naive baseline on this toy corpus (chunks ~50 tokens)."
+}

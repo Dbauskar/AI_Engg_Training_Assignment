@@ -1,0 +1,57 @@
+{
+  "scale": "500 VUs (local in-memory stack, single process, 4 vCPU)",
+  "vus": 500,
+  "requests": 25222,
+  "kpis": {
+    "KPI-31": {
+      "value": 1608.1926825,
+      "scale": "500 VUs (local in-memory stack, single process, 4 vCPU)"
+    },
+    "KPI-32": {
+      "value": 2991.538436599998,
+      "scale": "500 VUs (local in-memory stack, single process, 4 vCPU)"
+    },
+    "KPI-33": {
+      "value": 5980.866148990001,
+      "scale": "500 VUs (local in-memory stack, single process, 4 vCPU)"
+    },
+    "KPI-34": {
+      "value": 0,
+      "scale": "500 VUs (local in-memory stack, single process, 4 vCPU)"
+    },
+    "KPI-35": {
+      "value": 118.56602966464872,
+      "scale": "500 VUs (local in-memory stack, single process, 4 vCPU)"
+    }
+  },
+  "server_stage_ms_under_load": {
+    "srv_total_ms": {
+      "p50": 868.8499999999999,
+      "p95": 2270.275,
+      "p99": 5605.439999999988
+    },
+    "srv_hook_pre_ms": {
+      "p50": 368.85,
+      "p95": 1777.45,
+      "p99": 2494.8749999999995
+    },
+    "srv_triage_ms": {
+      "p50": 105.8,
+      "p95": 329.5799999999992,
+      "p99": 1081.8319999999983
+    },
+    "srv_retrieval_ms": {
+      "p50": 2436.85,
+      "p95": 7073.549999999999,
+      "p99": 8098.017000000008
+    },
+    "srv_generation_ms": {
+      "p50": 2576.1499999999996,
+      "p95": 6285.634999999999,
+      "p99": 7415.279000000002
+    }
+  },
+  "not_measured": [
+    "KPI-36 (needs a 1-hour soak with RSS sampling)"
+  ]
+}

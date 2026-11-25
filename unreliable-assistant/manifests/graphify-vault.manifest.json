@@ -1,0 +1,19 @@
+{
+  "alg": "ed25519",
+  "key_id": "95b26d211c2565dd",
+  "manifest": {
+    "expires_at": "2027-11-18T04:22:53.334666+00:00",
+    "issued_at": "2026-11-18T04:22:53.334666+00:00",
+    "resource_templates": [],
+    "server": "graphify-vault",
+    "tools": {
+      "graphify_subgraph": {
+        "input_schema_sha256": "e3b388732ab637fd4b82680f4d363229afa478807fd6c31d77c1d10e9671dae4",
+        "tier": 1
+      }
+    },
+    "transport": "stdio",
+    "version": "1.0.0"
+  },
+  "signature": "RFFmQDyFmsfm0BawM5r+0X5aG4bkWfB5+dY76+lAuRPa0WcTzpnnKkupA3nEcV61dLNzpkpb0MceKQCySwPeDQ=="
+}

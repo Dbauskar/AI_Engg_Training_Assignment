@@ -1,0 +1,101 @@
+{
+  "mcpServers": {
+    "hybrid-rag": {
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "mcp_servers/rag_server.py"
+      ],
+      "transport": "stdio",
+      "timeout_ms": 150,
+      "required": true,
+      "manifest": "manifests/hybrid-rag.manifest.json"
+    },
+    "state-store": {
+      "url": "http://127.0.0.1:8081/mcp",
+      "transport": "streamable-http",
+      "pool_size": 200,
+      "required": true,
+      "manifest": "manifests/state-store.manifest.json"
+    },
+    "graphify-vault": {
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "mcp_servers/graphify_server.py"
+      ],
+      "transport": "stdio",
+      "timeout_ms": 150,
+      "required": false,
+      "manifest": "manifests/graphify-vault.manifest.json"
+    }
+  },
+  "manifest_policy": {
+    "public_key": "keys/manifest_signing.pub",
+    "require_signed": true,
+    "max_age_days": 365
+  },
+  "plugins": [
+    {
+      "name": "pii_redactor",
+      "stages": [
+        "PRE_EXECUTION",
+        "POST_EXECUTION"
+      ],
+      "priority": 10,
+      "fail_closed": true
+    },
+    {
+      "name": "injection_shield",
+      "stages": [
+        "PRE_EXECUTION"
+      ],
+      "priority": 20,
+      "fail_closed": true
+    },
+    {
+      "name": "circuit_breaker",
+      "stages": [
+        "PRE_EXECUTION",
+        "POST_EXECUTION"
+      ],
+      "priority": 30,
+      "fail_closed": false
+    },
+    {
+      "name": "hitl_gate",
+      "stages": [
+        "POST_EXECUTION"
+      ],
+      "priority": 10,
+      "fail_closed": true
+    },
+    {
+      "name": "otel_exporter",
+      "stages": [
+        "POST_EXECUTION"
+      ],
+      "priority": 90,
+      "fail_closed": false
+    },
+    {
+      "name": "token_counter",
+      "stages": [
+        "PRE_EXECUTION"
+      ],
+      "priority": 40,
+      "fail_closed": false
+    },
+    {
+      "name": "ragas_scorer",
+      "stages": [
+        "POST_EXECUTION"
+      ],
+      "priority": 80,
+      "fail_closed": false,
+      "background": true
+    }
+  ]
+}

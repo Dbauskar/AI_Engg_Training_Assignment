@@ -1,0 +1,19 @@
+# Local scale-out approximation: N stateless API replicas behind NGINX.
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.scale.yml up -d --scale api=4 --scale model-worker=2
+# Single host, so it only proves statelessness and balancing, not cluster capacity.
+services:
+  api:
+    build: .
+    env_file: .env
+    environment: {REDIS_URL: "redis://redis:6379/0", POSTGRES_HOST: postgres}
+    depends_on: [postgres, redis]
+    expose: ["8080"]
+  model-worker:
+    build: .
+    command: ["uv", "run", "uvicorn", "mcp_servers.model_worker:app", "--host", "0.0.0.0", "--port", "8090"]
+    expose: ["8090"]
+  edge:
+    image: nginx:1.27
+    ports: ["8080:80"]
+    volumes: ["./deploy/nginx.local.conf:/etc/nginx/nginx.conf:ro"]
+    depends_on: [api]

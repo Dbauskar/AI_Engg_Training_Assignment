@@ -1,0 +1,21 @@
+{
+  "alg": "ed25519",
+  "key_id": "95b26d211c2565dd",
+  "manifest": {
+    "expires_at": "2027-11-18T04:22:53.324526+00:00",
+    "issued_at": "2026-11-18T04:22:53.324526+00:00",
+    "resource_templates": [
+      "rag://chunks/{tenant_id}/{chunk_id}"
+    ],
+    "server": "hybrid-rag",
+    "tools": {
+      "hybrid_retrieve": {
+        "input_schema_sha256": "a6df5c2749bf3c6eb74ef8d532ae2d950e43c3e0856d27839717ea6c93360e1b",
+        "tier": 1
+      }
+    },
+    "transport": "stdio",
+    "version": "1.0.0"
+  },
+  "signature": "Eq9EBJuF4+jnFuGxApYXSWKLBWqbumEr3dngju6wRwXC9W395IK0FhnhJBMpM82Pj1ZsH1xw3yqU/Knt9U3QAg=="
+}

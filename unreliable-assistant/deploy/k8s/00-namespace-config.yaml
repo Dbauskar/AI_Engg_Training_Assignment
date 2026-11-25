@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Namespace
+metadata: {name: assistant}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: assistant-config, namespace: assistant}
+data:
+  REDIS_URL: "redis://redis-cluster.assistant.svc:6379/0"
+  POSTGRES_HOST: "postgres.assistant.svc"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability.svc:4317"
+  MB_MAX_BATCH: "32"
+  MB_MAX_WAIT_MS: "8"
+---
+# Secrets are created out-of-band (sealed-secrets / external-secrets). Required keys: API_TOKEN_SECRET, APP_DB_PASSWORD, POSTGRES_PASSWORD.
+# This file deliberately contains no secret values.

@@ -1,0 +1,27 @@
+{
+  "alg": "ed25519",
+  "key_id": "95b26d211c2565dd",
+  "manifest": {
+    "expires_at": "2027-11-18T04:22:53.331022+00:00",
+    "issued_at": "2026-11-18T04:22:53.331022+00:00",
+    "resource_templates": [],
+    "server": "state-store",
+    "tools": {
+      "get_session_facts": {
+        "input_schema_sha256": "194f61d70a76a6f6d5937cef8d6e187e0815b26d061acf0ce578daa7109140a7",
+        "tier": 1
+      },
+      "submit_transaction": {
+        "input_schema_sha256": "6f247530f33dcf960175499e9b6ab23eb4ffa9be1171bc685bb3d5d498e5e399",
+        "tier": 3
+      },
+      "write_session_fact": {
+        "input_schema_sha256": "8485756ecea977699c054f3a9cb3f0059d2b0367755c1775a01f2c8dc92f8b22",
+        "tier": 2
+      }
+    },
+    "transport": "streamable-http",
+    "version": "1.0.0"
+  },
+  "signature": "RMHdYA5MsAWCeQDsjeJwCAGB/D80AMNQ5s7LfzDGlUAwNk242vibMt0SGOBBWXqTxEdJmjd6bVxiTWNK5gNZBw=="
+}

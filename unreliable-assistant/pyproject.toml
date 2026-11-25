@@ -1,0 +1,47 @@
+[project]
+name = "unreliable-assistant"
+version = "0.1.0"
+description = "Enterprise-grade, MCP-enabled hybrid RAG agent (hardened 'Unreliable Assistant')"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic>=2",
+    "rank-bm25",
+    "faiss-cpu",
+    "sentence-transformers",
+    "onnxruntime",
+    "redis",
+    "psycopg[binary]",
+    "mcp",
+    "pluggy",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp",
+    "ragas",
+    "streamlit",
+    "graphviz",
+    "presidio-analyzer",
+    "nltk>=3.10.4",
+    "tokenizers>=0.23.3",
+    "psycopg-pool>=3.3.3",
+    "en-core-web-sm",
+    "cryptography>=50.0.2",
+]
+
+[dependency-groups]
+dev = [
+    "onnx>=1.23.2",
+    "pytest",
+    "pytest-asyncio",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }

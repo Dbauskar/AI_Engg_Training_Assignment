@@ -1,0 +1,45 @@
+# 6-node Redis Cluster (3 primaries + 3 replicas). Run the one-off job below once after the pods are Ready.
+# Keys are tenant-prefixed (app/cache.py); use hash tags {tenant} only where multi-key ops need one slot.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: redis-cluster, namespace: assistant}
+spec:
+  serviceName: redis-cluster
+  replicas: 6
+  selector: {matchLabels: {app: redis-cluster}}
+  template:
+    metadata: {labels: {app: redis-cluster}}
+    spec:
+      containers:
+        - name: redis
+          image: redis:7.2
+          command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "/data/nodes.conf",
+                    "--cluster-node-timeout", "5000", "--appendonly", "yes", "--maxmemory", "6gb", "--maxmemory-policy", "allkeys-lru"]
+          ports: [{containerPort: 6379}, {containerPort: 16379}]
+          volumeMounts: [{name: data, mountPath: /data}]
+          resources: {requests: {cpu: "1", memory: 7Gi}, limits: {memory: 8Gi}}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 20Gi}}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: redis-cluster, namespace: assistant}
+spec: {clusterIP: None, selector: {app: redis-cluster}, ports: [{name: client, port: 6379}, {name: gossip, port: 16379}]}
+---
+apiVersion: batch/v1
+kind: Job
+metadata: {name: redis-cluster-init, namespace: assistant}
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: redis:7.2
+          command: ["/bin/sh", "-c"]
+          args:
+            - >
+              redis-cli --cluster create
+              $(for i in 0 1 2 3 4 5; do getent hosts redis-cluster-$i.redis-cluster.assistant.svc | cut -d' ' -f1 | tr '\n' ':' | sed 's/:$/:6379 /'; done)
+              --cluster-replicas 1 --cluster-yes

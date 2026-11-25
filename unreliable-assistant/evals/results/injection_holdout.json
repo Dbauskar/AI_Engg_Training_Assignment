@@ -1,0 +1,24 @@
+{
+  "direct": {
+    "n": 24,
+    "blocked": 21,
+    "missed_ids": [
+      6,
+      18,
+      21
+    ]
+  },
+  "indirect": {
+    "n": 16,
+    "blocked": 15,
+    "missed_ids": [
+      13
+    ]
+  },
+  "benign": {
+    "n": 60,
+    "false_positives": 0,
+    "ids": []
+  },
+  "mode": "patterns+classifier"
+}

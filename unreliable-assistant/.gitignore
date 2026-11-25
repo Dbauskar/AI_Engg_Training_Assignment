@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+*.log
+.pytest_cache/
+models/
+data/
+keys/*.key
+load_tests/tokens.json
+load_tests/out/
+load_tests/tokens.csv

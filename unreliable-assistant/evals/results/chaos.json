@@ -1,0 +1,91 @@
+{
+ "all_pass": false,
+ "scenarios": {
+  "cross_tenant_cache": {
+   "backend": "evals/fake_redis.py (no Redis reachable: proves application-level scoping only)",
+   "foreign_entry_served": false,
+   "kpi": "KPI-28 cross-tenant cache leaks",
+   "leaks": 0,
+   "leaks_blocked_counter": 2,
+   "legitimate_hits": 480,
+   "missing_tenant_rejected": true,
+   "pii_put_accepted": false,
+   "probes": 480,
+   "status": "PASS",
+   "unverified_entry_served": false,
+   "unverified_put_accepted": false
+  },
+  "llm_429": {
+   "fmea": "#4 LLM 429",
+   "note": "ResilientReasoner (agents/llm_reasoner.py): one jittered retry, then the extractive fallback; provider 429 simulated",
+   "status": "PASS",
+   "variants": {
+    "persistent_429": {
+     "fallbacks": 5,
+     "halt": "MAX_ITERATIONS",
+     "raised": false,
+     "reasoner_calls": 10,
+     "retries": 5,
+     "state": "HALTED",
+     "wrapper": {
+      "calls": 2,
+      "fallbacks": 1,
+      "got_answer": true,
+      "retries": 1
+     }
+    },
+    "single_429_then_ok": {
+     "fallbacks": 0,
+     "halt": "MAX_ITERATIONS",
+     "raised": false,
+     "reasoner_calls": 6,
+     "retries": 1,
+     "state": "HALTED",
+     "wrapper": {
+      "calls": 2,
+      "fallbacks": 0,
+      "got_answer": true,
+      "retries": 1
+     }
+    }
+   }
+  },
+  "mcp_hang": {
+   "fmea": "#3 MCP hang",
+   "halt": "BREAKER",
+   "handler_cancelled": 2,
+   "handler_started": 2,
+   "ms": 243.8,
+   "state": "HALTED",
+   "status": "PASS",
+   "tool_calls": 2
+  },
+  "redis_down": {
+   "answer_outcome_with_cache_down": "ANSWERED",
+   "cache_get_when_down": "bypass",
+   "cache_put_accepted": false,
+   "fmea": "#1 Redis down",
+   "note": "fail-closed (error) is acceptable for Tier 3; an unhandled exception or a double execution is not",
+   "status": "FAIL",
+   "tier3_submit_handler_runs": 0,
+   "tier3_submit_outcomes": [
+    "EXCEPTION ConnectionError",
+    "EXCEPTION ConnectionError"
+   ]
+  },
+  "sku_loop": {
+   "failed": [],
+   "halt_reasons": {
+    "BREAKER": 20,
+    "MAX_ITERATIONS": 12,
+    "STEP_TIMEOUT": 1
+   },
+   "kpi": "KPI-16 infinite-loop escape rate",
+   "n": 33,
+   "status": "PASS",
+   "threshold": 1.0,
+   "value": 1.0
+  }
+ },
+ "target": "in-process stack, fake tool handlers"
+}
